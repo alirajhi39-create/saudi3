@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { studentProgress } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { classifyDbError } from "@/lib/auth";
 
 // pg (عبر drizzle-orm/node-postgres) يستخدم Node.js APIs ولا يعمل على Edge.
 export const runtime = "nodejs";
@@ -17,8 +18,10 @@ export async function GET(req: NextRequest) {
     if (!studentId) return NextResponse.json({ error: "studentId مطلوب" }, { status: 400 });
     const rows = await db.select().from(studentProgress).where(eq(studentProgress.studentId, studentId));
     return NextResponse.json({ progress: rows });
-  } catch {
-    return NextResponse.json({ error: "خطأ" }, { status: 500 });
+  } catch (e) {
+    const c = classifyDbError(e);
+    console.error("[progress:get] database error:", c.code, c.log);
+    return NextResponse.json({ error: "خطأ", code: c.code }, { status: 500 });
   }
 }
 
@@ -50,7 +53,8 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "خطأ في الحفظ" }, { status: 500 });
+    const c = classifyDbError(e);
+    console.error("[progress:post] database error:", c.code, c.log);
+    return NextResponse.json({ error: "خطأ في الحفظ", code: c.code }, { status: 500 });
   }
 }

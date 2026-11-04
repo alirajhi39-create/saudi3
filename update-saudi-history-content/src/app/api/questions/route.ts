@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { questions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { QUESTION_BANK } from "@/lib/content";
+import { requireTeacher } from "@/lib/auth";
 
 // pg (عبر drizzle-orm/node-postgres) يستخدم Node.js APIs ولا يعمل على Edge.
 export const runtime = "nodejs";
@@ -47,6 +48,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!requireTeacher(req)) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    }
     const body = await req.json();
     const { axis, type, questionText, options, correctAnswer, explanation, difficulty, points } = body;
     if (!questionText) return NextResponse.json({ error: "نص السؤال مطلوب" }, { status: 400 });
@@ -69,6 +73,9 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    if (!requireTeacher(req)) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    }
     const body = await req.json();
     const { id, ...fields } = body;
     if (!id) return NextResponse.json({ error: "id مطلوب" }, { status: 400 });
@@ -91,6 +98,9 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    if (!requireTeacher(req)) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    }
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id مطلوب" }, { status: 400 });

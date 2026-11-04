@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { lessonContents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { STATIONS, AXES } from "@/lib/content";
+import { requireTeacher } from "@/lib/auth";
 
 // pg (عبر drizzle-orm/node-postgres) يستخدم Node.js APIs ولا يعمل على Edge.
 export const runtime = "nodejs";
@@ -39,6 +40,9 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
+    if (!requireTeacher(req)) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    }
     const { stationNumber, title, contentJson } = await req.json();
     if (!stationNumber) return NextResponse.json({ error: "stationNumber مطلوب" }, { status: 400 });
     const patch: Record<string, unknown> = { updatedAt: new Date() };

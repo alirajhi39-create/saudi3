@@ -13,6 +13,7 @@ export interface TeacherSession {
   id: number;
   username: string;
   name: string;
+  token?: string;
 }
 
 const STUDENT_KEY = "aroos_student";
@@ -42,13 +43,27 @@ export function getTeacher(): TeacherSession | null {
 export function clearTeacher() {
   try { localStorage.removeItem(TEACHER_KEY); } catch {}
 }
+export function getTeacherToken(): string | null {
+  return getTeacher()?.token || null;
+}
 
 export async function api(path: string, options?: RequestInit) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getTeacherToken();
+  // رمز المعلم يُرسل تلقائيًا عند توفره (للمسارات المحمية) — والكوكي httpOnly يُرسل أيضًا.
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
+    credentials: "include",
     ...options,
+    headers: { ...headers, ...(options?.headers as Record<string, string> | undefined) },
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && path.startsWith("/api/")) {
+    // انتهت جلسة المعلم — تنظيف تلقائي مع رسالة واضحة.
+    const err = new Error(data?.error || "انتهت الجلسة، فضلًا سجّل الدخول مجددًا") as Error & { status?: number };
+    err.status = 401;
+    throw err;
+  }
   if (!res.ok) throw new Error(data?.error || "حدث خطأ");
   return data;
 }

@@ -54,7 +54,14 @@ export default function TeacherPage() {
       setQuestions(q.questions || []);
       const c = await api("/api/content");
       setContents(c.contents || []);
-    } catch {} finally { setLoading(false); }
+    } catch (e: unknown) {
+      // انتهت الجلسة أو رمز غير صالح → خروج تلقائي وطلب الدخول مجددًا.
+      if ((e as { status?: number })?.status === 401) {
+        clearTeacher();
+        setTeacher(null);
+        setLoginMsg("انتهت الجلسة، فضلًا سجّل الدخول مجددًا");
+      }
+    } finally { setLoading(false); }
   }
 
   async function login() {

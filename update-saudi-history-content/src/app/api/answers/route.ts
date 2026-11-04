@@ -1,29 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { answers } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { requireTeacher, classifyDbError } from "@/lib/auth";
 
-// pg (عبر drizzle-orm/node-postgres) يستخدم Node.js APIs ولا يعمل على Edge.
 export const runtime = "nodejs";
 // المسار ديناميكي فعلًا: يقرأ req.url/req.json ويستعلم قاعدة بيانات حيّة.
 export const dynamic = "force-dynamic";
 
-// GET ?studentId=&stationNumber?=&needsReview?=1
-// POST save answer
-// PUT teacher review {id, teacherFeedback, teacherScore, status}
+// GET ?studentId=&stationNumber? (للطالب) | ?needsReview=1 (للمعلم فقط)
+// POST save answer (للطالب)
+// PUT teacher review (للمعلم فقط)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const studentId = searchParams.get("studentId");
     const stationNumber = searchParams.get("stationNumber");
     const needsReview = searchParams.get("needsReview");
-    let rows = await db.select().from(answers).orderBy(desc(answers.createdAt));
-    if (studentId) rows = rows.filter((r) => String(r.studentId) === String(studentId));
-    if (stationNumber) rows = rows.filter((r) => String(r.stationNumber) === String(stationNumber));
-    if (needsReview === "1") rows = rows.filter((r) => r.status === "needs_review" || r.status === "submitted");
+
+    if (needsReview === "1" || (!studentId && !stationNumber)) {
+      // المراجعة والسرد الشامل خاصان بالمعلم فقط.
+      if (!requireTeacher(req)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+      }
+      const rows = needsReview === "1"
+        ? await db.select().from(answers).where(inArray(answers.status, ["needs_review", "submitted"])).orderBy(desc(answers.createdAt))
+        : await db.select().from(answers).orderBy(desc(answers.createdAt));
+      return NextResponse.json({ answers: rows });
+    }
+
+    const conditions = [eq(answers.studentId, Number(studentId))];
+    if (stationNumber) conditions.push(eq(answers.stationNumber, Number(stationNumber)));
+    const rows = await db.select().from(answers).where(and(...conditions)).orderBy(desc(answers.createdAt));
     return NextResponse.json({ answers: rows });
-  } catch {
-    return NextResponse.json({ error: "خطأ" }, { status: 500 });
+  } catch (e) {
+    const c = classifyDbError(e);
+    console.error("[answers:get] database error:", c.code, c.log);
+    return NextResponse.json({ error: "خطأ", code: c.code }, { status: 500 });
   }
 }
 
@@ -66,13 +79,17 @@ export async function POST(req: NextRequest) {
     }).returning();
     return NextResponse.json({ ok: true, id: rows[0].id });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "تعذر حفظ الإجابة" }, { status: 500 });
+    const c = classifyDbError(e);
+    console.error("[answers:post] database error:", c.code, c.log);
+    return NextResponse.json({ error: "تعذر حفظ الإجابة", code: c.code }, { status: 500 });
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
+    if (!requireTeacher(req)) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    }
     const { id, teacherFeedback, teacherScore, status } = await req.json();
     if (!id) return NextResponse.json({ error: "id مطلوب" }, { status: 400 });
     await db.update(answers).set({
@@ -82,7 +99,9 @@ export async function PUT(req: NextRequest) {
       updatedAt: new Date(),
     }).where(eq(answers.id, Number(id)));
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "خطأ" }, { status: 500 });
+  } catch (e) {
+    const c = classifyDbError(e);
+    console.error("[answers:review] database error:", c.code, c.log);
+    return NextResponse.json({ error: "خطأ", code: c.code }, { status: 500 });
   }
 }

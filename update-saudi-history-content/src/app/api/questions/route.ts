@@ -4,6 +4,9 @@ import { questions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { QUESTION_BANK } from "@/lib/content";
 
+// pg (عبر drizzle-orm/node-postgres) يستخدم Node.js APIs ولا يعمل على Edge.
+export const runtime = "nodejs";
+// المسار ديناميكي فعلًا: يقرأ req.json ويستعلم قاعدة بيانات حيّة.
 export const dynamic = "force-dynamic";
 
 function toDbFormat() {

@@ -1,6 +1,9 @@
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
+// pg (عبر drizzle-orm/node-postgres) يستخدم Node.js APIs ولا يعمل على Edge.
+export const runtime = "nodejs";
+// المسار ديناميكي فعلًا: يستعلم قاعدة بيانات حيّة.
 export const dynamic = "force-dynamic";
 
 export async function GET() {

@@ -1,0 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Amiri:wght@400;700&family=Cairo:wght@400;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Tajawal", "Cairo", system-ui, sans-serif;
+  --font-amiri: "Amiri", serif;
+  --color-saudi-50: #eef7f1;
+  --color-saudi-100: #d7ecdd;
+  --color-saudi-200: #b2d9c1;
+  --color-saudi-300: #82bf9b;
+  --color-saudi-400: #4fa374;
+  --color-saudi-500: #1e8a55;
+  --color-saudi-600: #0b6e3f;
+  --color-saudi-700: #095c35;
+  --color-saudi-800: #084e2d;
+  --color-saudi-900: #063d23;
+  --color-saudi-950: #042a18;
+  --color-gold-100: #faf3e3;
+  --color-gold-200: #f2e4c4;
+  --color-gold-300: #e7d0a0;
+  --color-gold-400: #d9b877;
+  --color-gold-500: #c9a86a;
+  --color-gold-600: #a8864a;
+  --color-gold-700: #86683a;
+  --color-sand-50: #faf7f0;
+  --color-sand-100: #f4edde;
+  --color-sand-200: #e9dcc3;
+}
+
+html {
+  direction: rtl;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Tajawal", "Cairo", system-ui, sans-serif;
+  background: #faf7f0;
+  color: #1a2e22;
+}
+
+.font-amiri { font-family: "Amiri", serif; }
+
+/* Islamic pattern background */
+.pattern-bg {
+  background-color: #095c35;
+  background-image:
+    radial-gradient(circle at 25% 25%, rgba(201,168,106,0.14) 0, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(201,168,106,0.12) 0, transparent 50%),
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 14px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 14px);
+}
+.pattern-light {
+  background-color: #faf7f0;
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(11,110,63,0.06) 0, transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(201,168,106,0.10) 0, transparent 45%),
+    repeating-linear-gradient(45deg, rgba(11,110,63,0.025) 0 2px, transparent 2px 16px);
+}
+.gold-frame {
+  border: 3px double #c9a86a;
+  outline: 1px solid rgba(201,168,106,0.4);
+  outline-offset: 4px;
+}
+.card-hover { transition: transform .3s ease, box-shadow .3s ease; }
+.card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 45px rgba(6,61,35,.16); }
+
+@keyframes floaty { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+.animate-floaty { animation: floaty 4s ease-in-out infinite; }
+@keyframes fadeUp { from{opacity:0; transform:translateY(18px)} to{opacity:1; transform:translateY(0)} }
+.animate-fadeUp { animation: fadeUp .6s ease both; }
+@keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+.shimmer {
+  background: linear-gradient(90deg, #c9a86a 25%, #f2e4c4 50%, #c9a86a 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2.5s infinite;
+}
+@keyframes pop { 0%{transform:scale(.9); opacity:0} 100%{transform:scale(1); opacity:1} }
+.animate-pop { animation: pop .35s ease both; }
+
+/* Drag & drop */
+.drag-item { cursor: grab; user-select: none; transition: all .2s ease; }
+.drag-item:active { cursor: grabbing; }
+.drag-item.dragging { opacity: .5; transform: scale(.97); }
+.drop-zone { transition: all .25s ease; }
+.drop-zone.drag-over { border-color: #0b6e3f !important; background: #d7ecdd !important; transform: scale(1.01); }
+.drop-zone.filled-correct { border-color: #0b6e3f !important; background: #eef7f1 !important; }
+.drop-zone.filled-wrong { border-color: #dc2626 !important; background: #fef2f2 !important; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #f4edde; }
+::-webkit-scrollbar-thumb { background: #0b6e3f; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #095c35; }
+
+/* Print certificate */
+@media print {
+  body { background: white !important; }
+  .no-print { display: none !important; }
+  .print-full { box-shadow: none !important; margin: 0 !important; max-width: none !important; }
+  @page { size: A4 landscape; margin: 10mm; }
+}
+
+/* Audio wave animation */
+@keyframes wave { 0%,100%{height:8px} 50%{height:26px} }
+.wave-bar { animation: wave 1s ease-in-out infinite; }
+
+/* Timeline connector */
+.station-path { position: relative; }
+.station-path::before {
+  content: ""; position: absolute; top: 0; bottom: 0; right: 50%;
+  width: 4px; transform: translateX(50%);
+  background: repeating-linear-gradient(to bottom, #c9a86a 0 12px, transparent 12px 24px);
+  opacity: .5;
+}

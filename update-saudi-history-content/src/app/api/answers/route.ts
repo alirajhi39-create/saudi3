@@ -1,107 +1,55 @@
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { answers } from "@/db/schema";
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { requireTeacher, classifyDbError } from "@/lib/auth";
+import { z } from "zod";
+import { badRequest, getStudentSession, unauthorized } from "@/lib/auth";
+import { ANSWER_KEYS } from "@/lib/lesson-content";
+import { ensureSeeded } from "@/lib/seed";
+import { markSlide, upsertAnswer } from "@/lib/student-data";
 
-export const runtime = "nodejs";
-// المسار ديناميكي فعلًا: يقرأ req.url/req.json ويستعلم قاعدة بيانات حيّة.
 export const dynamic = "force-dynamic";
 
-// GET ?studentId=&stationNumber? (للطالب) | ?needsReview=1 (للمعلم فقط)
-// POST save answer (للطالب)
-// PUT teacher review (للمعلم فقط)
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const studentId = searchParams.get("studentId");
-    const stationNumber = searchParams.get("stationNumber");
-    const needsReview = searchParams.get("needsReview");
+const KEY_TO_SLIDE: Record<string, number> = {
+  kwl: 2,
+  drill_admin: 3,
+  activity1: 4,
+  matching_security: 7,
+  inference_haramain: 8,
+  ordering_army: 9,
+  classification_army: 9,
+  classification_urban: 10,
+  exit_ticket: 12,
+};
 
-    if (needsReview === "1" || (!studentId && !stationNumber)) {
-      // المراجعة والسرد الشامل خاصان بالمعلم فقط.
-      if (!requireTeacher(req)) {
-        return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
-      }
-      const rows = needsReview === "1"
-        ? await db.select().from(answers).where(inArray(answers.status, ["needs_review", "submitted"])).orderBy(desc(answers.createdAt))
-        : await db.select().from(answers).orderBy(desc(answers.createdAt));
-      return NextResponse.json({ answers: rows });
-    }
+const schema = z.object({
+  key: z.enum(ANSWER_KEYS),
+  kind: z.enum(["open", "drill", "reflection"]).default("open"),
+  payload: z.record(z.string(), z.unknown()),
+  score: z.number().min(0).nullable().optional(),
+  maxScore: z.number().min(0).nullable().optional(),
+  completesSlide: z.boolean().optional().default(true),
+});
 
-    const conditions = [eq(answers.studentId, Number(studentId))];
-    if (stationNumber) conditions.push(eq(answers.stationNumber, Number(stationNumber)));
-    const rows = await db.select().from(answers).where(and(...conditions)).orderBy(desc(answers.createdAt));
-    return NextResponse.json({ answers: rows });
-  } catch (e) {
-    const c = classifyDbError(e);
-    console.error("[answers:get] database error:", c.code, c.log);
-    return NextResponse.json({ error: "خطأ", code: c.code }, { status: 500 });
-  }
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
+  const session = await getStudentSession();
+  if (!session) return unauthorized();
   try {
     const body = await req.json();
-    const { studentId, stationNumber, activityKey, answerType, answerText, audioData, answerJson, score, maxScore, status } = body;
-    if (!studentId || !stationNumber || !activityKey) {
-      return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
-    }
-    // upsert: update if same student+station+activity exists (keep latest)
-    const all = await db.select().from(answers).where(
-      and(eq(answers.studentId, Number(studentId)), eq(answers.stationNumber, Number(stationNumber)), eq(answers.activityKey, String(activityKey)))
-    );
-    if (all.length) {
-      const prev = all[0];
-      await db.update(answers).set({
-        answerType: String(answerType || prev.answerType),
-        answerText: answerText !== undefined ? String(answerText) : prev.answerText,
-        audioData: audioData !== undefined ? String(audioData) : prev.audioData,
-        answerJson: answerJson !== undefined ? answerJson : prev.answerJson,
-        score: Number(score ?? prev.score ?? 0),
-        maxScore: Number(maxScore ?? prev.maxScore ?? 0),
-        status: String(status || prev.status || "submitted"),
-        updatedAt: new Date(),
-      }).where(eq(answers.id, prev.id));
-      return NextResponse.json({ ok: true, id: prev.id });
-    }
-    const rows = await db.insert(answers).values({
-      studentId: Number(studentId),
-      stationNumber: Number(stationNumber),
-      activityKey: String(activityKey),
-      answerType: String(answerType || "text"),
-      answerText: answerText ? String(answerText) : undefined,
-      audioData: audioData ? String(audioData) : undefined,
-      answerJson: answerJson ?? undefined,
-      score: Number(score || 0),
-      maxScore: Number(maxScore || 0),
-      status: String(status || "submitted"),
-    }).returning();
-    return NextResponse.json({ ok: true, id: rows[0].id });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) return badRequest("بيانات الإجابة غير صالحة");
+    if (JSON.stringify(parsed.data.payload).length > 30000) return badRequest("حجم الإجابة كبير جدًا");
+    const lessonId = await ensureSeeded();
+    const row = await upsertAnswer({
+      studentId: session.sid,
+      lessonId,
+      key: parsed.data.key,
+      kind: parsed.data.kind,
+      payload: parsed.data.payload,
+      score: parsed.data.score ?? null,
+      maxScore: parsed.data.maxScore ?? null,
+    });
+    const slide = KEY_TO_SLIDE[parsed.data.key];
+    if (slide && parsed.data.completesSlide) await markSlide(session.sid, lessonId, slide, true);
+    return Response.json({ ok: true, answer: { payload: row.payload, score: row.score, maxScore: row.maxScore, updatedAt: row.updatedAt } });
   } catch (e) {
-    const c = classifyDbError(e);
-    console.error("[answers:post] database error:", c.code, c.log);
-    return NextResponse.json({ error: "تعذر حفظ الإجابة", code: c.code }, { status: 500 });
-  }
-}
-
-export async function PUT(req: NextRequest) {
-  try {
-    if (!requireTeacher(req)) {
-      return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
-    }
-    const { id, teacherFeedback, teacherScore, status } = await req.json();
-    if (!id) return NextResponse.json({ error: "id مطلوب" }, { status: 400 });
-    await db.update(answers).set({
-      teacherFeedback: teacherFeedback ? String(teacherFeedback) : undefined,
-      teacherScore: teacherScore !== undefined && teacherScore !== null ? Number(teacherScore) : undefined,
-      status: String(status || "reviewed"),
-      updatedAt: new Date(),
-    }).where(eq(answers.id, Number(id)));
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    const c = classifyDbError(e);
-    console.error("[answers:review] database error:", c.code, c.log);
-    return NextResponse.json({ error: "خطأ", code: c.code }, { status: 500 });
+    console.error(e);
+    return Response.json({ ok: false, error: "تعذر حفظ الإجابة. تحقق من الاتصال وحاول مرة أخرى." }, { status: 500 });
   }
 }
